@@ -3,9 +3,8 @@ Modern GUI application that transcribes and translate audio files using OpenAI W
 
 
 ## Preview
-![preview](https://github.com/iamironman0/OpenAI-Whisper-GUI/assets/63475761/bb5fcac3-6d87-4617-9f3c-dcdbf0963574)
+![Screenshot 2023-08-07 104238](https://github.com/iamironman0/OpenAI-Whisper-GUI/assets/63475761/ed4e92a3-f7d4-40d5-8e67-6e849a8190ab)
 
-https://github.com/iamironman0/OpenAI-Whisper-GUI/assets/63475761/a6a65286-4450-4493-aef1-a2c3f658c96d
 
 ## Setup
 
@@ -20,7 +19,7 @@ https://github.com/iamironman0/OpenAI-Whisper-GUI/assets/63475761/a6a65286-4450-
 1. Install the required dependencies by running the following command:
 
 ```
-pip install customtkinter Pillow torch openai-whisper torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
+pip install customtkinter Pillow pynvml torch openai-whisper torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
 ```
 
 2. Install fffmpeg:

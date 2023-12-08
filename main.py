@@ -1,16 +1,16 @@
 import os
+import subprocess
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
-
 import pynvml
 import torch
 import whisper
 from whisper.utils import get_writer
-
 import customtkinter as ctk
 from customtkinter import filedialog as fd
-
+from CTkMessagebox import CTkMessagebox
 from PIL import Image
+import traceback
 
 
 app_version = "Version 1.1"
@@ -247,7 +247,7 @@ class WhisperGui(ctk.CTk):
     def _left_frame(self):
         checker = CheckMemory()
         result = checker.check_memory()
-        models = ["Tiny", "Base", "Small", "Medium", "Large"]
+        models = ["Tiny", "Base", "Small", "Medium", "Large", "Large-v2"]
         models_value = []
 
         if result == False:
@@ -432,6 +432,19 @@ class WhisperGui(ctk.CTk):
         self.device_option.set("GPU")
         self.device_option.grid(row=4, column=1, padx=10, pady=10)
 
+        # #Language to Translate To Settings
+        # translated_language_label = ctk.CTkLabel(self.left_frame, text="Translate To")
+        # translated_language_label.grid(row=5, column=0, padx=10, pady=10)
+        #
+        # translated_language_value = language_values
+        # self.translated_language_option = ctk.CTkOptionMenu(
+        #     self.left_frame,
+        #     values=translated_language_value,
+        #     **custom_optionmenu,
+        # )
+        # self.translated_language_option.set("English")
+        # self.translated_language_option.grid(row=5, column=1, padx=10, pady=10)
+
         self.upload_button = ctk.CTkButton(
             self.left_frame,
             text="Upload Audio/Video",
@@ -440,7 +453,7 @@ class WhisperGui(ctk.CTk):
             **custom_button,
         )
         self.upload_button.grid(
-            row=5, column=0, padx=10, pady=10, rowspan=5, columnspan=2
+            row=6, column=0, padx=10, pady=10, rowspan=5, columnspan=2
         )
 
     def _right_frame(self):
@@ -521,10 +534,10 @@ class WhisperGui(ctk.CTk):
         github_button.grid(row=0, column=2, padx=10, pady=10)
 
     # Functions
+    #TODO condition to check if task = Translate
     def start_task(self):
         if self.return_data():
             file_path, model, language, task, device, show_time = self.return_data()
-
             self.thread_pool.submit(
                 self.run_transcribe,
                 file_path,
@@ -536,90 +549,103 @@ class WhisperGui(ctk.CTk):
             )
 
     def run_transcribe(self, file_path, model, language, task, device, show_time):
-        notification = Notification(
-            master=self,
-            text="Task has started. Please wait!",
-            cl_btn=False,
-            progress_bar=True,
-        )
-        notification.show_message()
-        self.start_button.configure(state="disabled")
-
-        fp16 = True
-
-        if device == "cpu":
-            fp16 = False
-
-        load_model = whisper.load_model(model, device=device)
-        load_audio = whisper.load_audio(file_path)
-        load_audio = whisper.pad_or_trim(load_audio)
-        audio = file_path
-
-        if language == "auto detection":
-            mel = whisper.log_mel_spectrogram(load_audio).to(load_model.device)
-
-            _, probs = load_model.detect_language(mel)
-            lang = max(probs, key=probs.get)
-            self.lang = lang
-
-            result = load_model.transcribe(
-                audio,
-                language=lang,
-                task=task,
-                fp16=fp16,
+        try:
+            notification = Notification(
+                master=self,
+                text="Task has started. Please wait!",
+                cl_btn=False,
+                progress_bar=True,
             )
+            notification.show_message()
+            self.start_button.configure(state="disabled")
 
-            if show_time == "on":
-                for segment in result["segments"]:
-                    segment = "[%s --> %s]%s" % (
-                        round(segment["start"], 2),
-                        round(segment["end"], 2),
-                        segment["text"],
-                    )
+            fp16 = True
+
+            if device == "cpu":
+                fp16 = False
+
+            load_model = whisper.load_model(model, device=device)
+            load_audio = whisper.load_audio(file_path)
+            load_audio = whisper.pad_or_trim(load_audio)
+            audio = file_path
+
+            if language == "auto detection":
+                mel = whisper.log_mel_spectrogram(load_audio).to(load_model.device)
+
+                _, probs = load_model.detect_language(mel)
+                lang = max(probs, key=probs.get)
+                self.lang = lang
+
+                result = load_model.transcribe(
+                    audio,
+                    language=lang,
+                    task=task,
+                    fp16=fp16,
+                )
+
+                if show_time == "on":
+                    for segment in result["segments"]:
+                        segment = "[%s --> %s]%s" % (
+                            round(segment["start"], 2),
+                            round(segment["end"], 2),
+                            segment["text"],
+                        )
+                        self.textbox.configure(state="normal")
+                        self.textbox.delete("0.0", "end")
+                        self.textbox.insert("end", segment + "\n")
+                        self.textbox.configure(state="disabled")
+                else:
+                    text = result["text"].strip().capitalize()
                     self.textbox.configure(state="normal")
                     self.textbox.delete("0.0", "end")
-                    self.textbox.insert("end", segment + "\n")
+                    self.textbox.insert("end", text)
                     self.textbox.configure(state="disabled")
+
             else:
-                text = result["text"].strip().capitalize()
-                self.textbox.configure(state="normal")
-                self.textbox.delete("0.0", "end")
-                self.textbox.insert("end", text)
-                self.textbox.configure(state="disabled")
+                ### Using the command line via subprocess to translate is a temporary fix for the api method not
+                ### generating a full translation when load_model.transcribe() is called.
+                result = subprocess.call(
+                    f"whisper {file_path} --output_format srt --language {language.capitalize()} --model {model}"
+                )
+                # task = "translate"
+                # result = load_model.transcribe(
+                #     audio,
+                #     language=language,
+                #     task=task,
+                #     fp16=fp16,
+                # )
+                # if show_time == "on":
+                #     for segment in result["segments"]:
+                #         segment = "[%s --> %s]%s" % (
+                #             round(segment["start"], 2),
+                #             round(segment["end"], 2),
+                #             segment["text"],
+                #         )
+                #         self.textbox.configure(state="normal")
+                #         self.textbox.delete("0.0", "end")
+                #         self.textbox.insert("end", segment + "\n")
+                #         self.textbox.configure(state="disabled")
+                # else:
+                #     text = result["text"].strip().capitalize()
+                #     self.textbox.configure(state="normal")
+                #     self.textbox.delete("0.0", "end")
+                #     self.textbox.insert("end", text)
+                #     self.textbox.configure(state="disabled")
 
-        else:
-            result = load_model.transcribe(
-                audio,
-                language=language,
-                task=task,
-                fp16=fp16,
-            )
-            if show_time == "on":
-                for segment in result["segments"]:
-                    segment = "[%s --> %s]%s" % (
-                        round(segment["start"], 2),
-                        round(segment["end"], 2),
-                        segment["text"],
-                    )
-                    self.textbox.configure(state="normal")
-                    self.textbox.delete("0.0", "end")
-                    self.textbox.insert("end", segment + "\n")
-                    self.textbox.configure(state="disabled")
-            else:
-                text = result["text"].strip().capitalize()
-                self.textbox.configure(state="normal")
-                self.textbox.delete("0.0", "end")
-                self.textbox.insert("end", text)
-                self.textbox.configure(state="disabled")
+            self.result = result
 
-        self.result = result
-
-        self.start_button.configure(state="normal")
-        notification.hide_message()
-        notification = Notification(master=self, text="Task complete!")
-        notification.show_message()
-        self.after(5000, notification.hide_message)
-
+            self.start_button.configure(state="normal")
+            notification.hide_message()
+            notification = Notification(master=self, text="Task complete!")
+            notification.show_message()
+            self.after(5000, notification.hide_message)
+        except Exception as e:
+            CTkMessagebox(width=700,height=200,sound=True,title="Error", message=f"{e}")
+            self.start_button.configure(state="normal")
+            notification.hide_message()
+            notification = Notification(master=self, text="Task Failed!")
+            notification.show_message()
+            self.after(5000, notification.hide_message)
     def start_subtask(self):
         if self.result is not None and self.file_path is not None:
             ogfile_name = os.path.basename(self.file_path)
@@ -730,7 +756,12 @@ class WhisperGui(ctk.CTk):
 
             if file_path and (file_extension[1] == ".srt"):
                 writer = get_writer("srt", dir_name)
-                writer(self.result, file_name)
+                word_options = {
+                    "highlight_words": True,
+                    "max_line_count": 50,
+                    "max_line_width": 3
+                }
+                writer(self.result, file_name,word_options)
                 self.save_notification()
             elif file_path and (file_extension[1] == ".txt"):
                 txt_writer = get_writer("txt", dir_name)

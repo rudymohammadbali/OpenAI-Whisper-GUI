@@ -1,95 +1,177 @@
 import os
-import subprocess
+import sys
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
+
+import customtkinter as ctk
 import pynvml
 import torch
 import whisper
-from whisper.utils import get_writer
-import customtkinter as ctk
-from customtkinter import filedialog as fd
-from CTkMessagebox import CTkMessagebox
 from PIL import Image
-import traceback
+from customtkinter import filedialog as fd
+from whisper.utils import get_writer
 
+from assets.ctkdropdown import CTkScrollableDropdownFrame
+from assets.ctkmessagebox import CTkMessagebox
 
-app_version = "Version 1.1"
-app_logo = "./icons/logo.ico"
+CURRENT_PATH = os.path.dirname(os.path.realpath(__file__))
 
-
-def load_image(path, size):
-    return ctk.CTkImage(Image.open(path), size=size)
-
-
-image_info = {
-    "clear_icon": {"path": "./icons/delete.png", "size": (20, 20)},
-    "github_icon": {"path": "./icons/github.png", "size": (20, 20)},
-    "warning_icon": {"path": "./icons/warning.png", "size": (50, 50)},
-    "close_icon": {"path": "./icons/close-white.png", "size": (20, 20)},
-    "exit_icon": {"path": "./icons/exit.png", "size": (20, 20)},
-    "background": {"path": "./icons/background.jpg", "size": (500, 250)},
+APP_LOGO = f"{CURRENT_PATH}\\assets\\icons\\logo.ico"
+APP_VERSION = "Version 20231217"
+ICONS = {
+    "theme": ctk.CTkImage(light_image=Image.open(f"{CURRENT_PATH}\\assets\\icons\\theme_black.png"),
+                          dark_image=Image.open(f"{CURRENT_PATH}\\assets\\icons\\theme_white.png"), size=(25, 25)),
+    "github": ctk.CTkImage(light_image=Image.open(f"{CURRENT_PATH}\\assets\\icons\\github.png"),
+                           dark_image=Image.open(f"{CURRENT_PATH}\\assets\\icons\\github.png"), size=(25, 25))
 }
 
+LANGUAGE_VALUES = [
+    "Auto Detection",
+    "English",
+    "Chinese",
+    "German",
+    "Spanish",
+    "Russian",
+    "Korean",
+    "French",
+    "Japanese",
+    "Portuguese",
+    "Turkish",
+    "Polish",
+    "Catalan",
+    "Dutch",
+    "Arabic",
+    "Swedish",
+    "Italian",
+    "Indonesian",
+    "Hindi",
+    "Finnish",
+    "Vietnamese",
+    "Hebrew",
+    "Ukrainian",
+    "Greek",
+    "Malay",
+    "Czech",
+    "Romanian",
+    "Danish",
+    "Hungarian",
+    "Tamil",
+    "Norwegian",
+    "Thai",
+    "Urdu",
+    "Croatian",
+    "Bulgarian",
+    "Lithuanian",
+    "Latin",
+    "Maori",
+    "Malayalam",
+    "Welsh",
+    "Slovak",
+    "Telugu",
+    "Persian",
+    "Latvian",
+    "Bengali",
+    "Serbian",
+    "Azerbaijani",
+    "Slovenian",
+    "Kannada",
+    "Estonian",
+    "Macedonian",
+    "Breton",
+    "Basque",
+    "Icelandic",
+    "Armenian",
+    "Nepali",
+    "Mongolian",
+    "Bosnian",
+    "Kazakh",
+    "Albanian",
+    "Swahili",
+    "Galician",
+    "Marathi",
+    "Punjabi",
+    "Sinhala",
+    "Khmer",
+    "Shona",
+    "Yoruba",
+    "Somali",
+    "Afrikaans",
+    "Occitan",
+    "Georgian",
+    "Belarusian",
+    "Tajik",
+    "Sindhi",
+    "Gujarati",
+    "Amharic",
+    "Yiddish",
+    "Lao",
+    "Uzbek",
+    "Faroese",
+    "Haitian creole",
+    "Pashto",
+    "Turkmen",
+    "Nynorsk",
+    "Maltese",
+    "Sanskrit",
+    "Luxembourgish",
+    "Myanmar",
+    "Tibetan",
+    "Tagalog",
+    "Malagasy",
+    "Assamese",
+    "Tatar",
+    "Hawaiian",
+    "Lingala",
+    "Hausa",
+    "Bashkir",
+    "Javanese",
+    "Sundanese"
+]
 
-icons = {
-    name: load_image(info["path"], info["size"]) for name, info in image_info.items()
+FONTS = {
+    "title_bold": ("Inter", 24, "bold"),
+    "title": ("Inter", 22, "normal"),
+    "subtitle_bold": ("Inter", 18, "bold"),
+    "btn": ("Inter", 15, "normal"),
+    "normal": ("Inter", 14, "normal"),
+    "small": ("Inter", 12, "normal"),
 }
 
-clear_icon = icons["clear_icon"]
-github_icon = icons["github_icon"]
-warning_icon = icons["warning_icon"]
-close_icon = icons["close_icon"]
-exit_icon = icons["exit_icon"]
-background = icons["background"]
-
-
-custom_button = {
-    "bg_color": "transparent",
-    "fg_color": "#a52a2a",
-    "text_color": "#ffffff",
-    "hover_color": "#8d0d26",
-    "text_color_disabled": "#a8a8a8",
+DROPDOWN = {
+    "font": FONTS["small"],
     "corner_radius": 2,
-}
-
-custom_optionmenu = {
-    "bg_color": "transparent",
-    "fg_color": "#a52a2a",
-    "text_color": "#ffffff",
-    "text_color_disabled": "#a8a8a8",
-    "button_color": "#8d0d26",
-    "button_hover_color": "#800000",
-    "dropdown_fg_color": "#a52a2a",
-    "dropdown_hover_color": "#8d0d26",
-    "dropdown_text_color": "#ffffff",
-    "corner_radius": 2,
+    "alpha": 1.0,
+    "frame_corner_radius": 5,
+    "x": 0,
+    "justify": "center"
 }
 
 
-class CheckMemory:
+class CheckRequirements:
     def __init__(self, device_id=0):
         self.device_id = device_id
         self.check_cuda = torch.cuda.is_available()
 
     def check_memory(self):
         if self.check_cuda:
-            gpu_memory = self._get_gpu_memory()
-            free_memory_gb = int(gpu_memory.free / (1024**3))
-            unsupported_models = self._check_memory_requirements(free_memory_gb)
+            gpu_memory = self.get_gpu_memory()
+            free_memory_gb = int(gpu_memory.free / (1024 ** 3))
+            unsupported_models = self.check_memory_requirements(free_memory_gb)
             return unsupported_models if unsupported_models else None
         else:
             return False
 
-    def _get_gpu_memory(self):
+    def get_gpu_memory(self):
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(self.device_id)
         info = pynvml.nvmlDeviceGetMemoryInfo(handle)
         pynvml.nvmlShutdown()
         return info
 
-    def _check_memory_requirements(self, free_memory_gb):
+    @staticmethod
+    def check_memory_requirements(free_memory_gb):
         memory_requirements = {
-            10: "Large",
+            10: ["Large", "Large-v1", "Large-v2", "Large-v3"],
             5: "Medium",
             2: "Small",
             1: ["Base", "Tiny"],
@@ -105,99 +187,33 @@ class CheckMemory:
         return unsupported_models
 
 
-class Notification(ctk.CTkFrame):
-    def __init__(self, master, text="", cl_btn=True, ex_btn=False, progress_bar=False):
-        super().__init__(
-            master,
-            width=400,
-            height=200,
-            border_width=2,
-            border_color="#a52a2a",
-            corner_radius=5,
-        )
-        self.pack_propagate(0)
+def open_github():
+    webbrowser.open("https://github.com/iamironman0")
 
-        self.master = master
 
-        warning = ctk.CTkLabel(self, text="", image=warning_icon)
-        warning.pack(padx=10, pady=10, side="top")
-
-        message = ctk.CTkLabel(self, text=text)
-        message.pack(padx=10, pady=10, fill="both", expand=True)
-
-        if cl_btn:
-            close_btn = ctk.CTkButton(
-                self,
-                text="Close",
-                image=close_icon,
-                command=self.hide_message,
-                width=100,
-                bg_color="transparent",
-                fg_color="#a52a2a",
-                text_color="#ffffff",
-                hover_color="#8d0d26",
-                text_color_disabled="#a8a8a8",
-                corner_radius=2,
-            )
-            close_btn.pack(padx=10, pady=10, side="right")
-
-        if ex_btn:
-            exit_btn = ctk.CTkButton(
-                self,
-                text="Exit",
-                image=exit_icon,
-                command=self.master.destroy,
-                width=100,
-                bg_color="transparent",
-                fg_color="#a52a2a",
-                text_color="#ffffff",
-                hover_color="#8d0d26",
-                text_color_disabled="#a8a8a8",
-                corner_radius=2,
-            )
-            exit_btn.pack(padx=10, pady=10, side="right")
-
-        if progress_bar:
-            progress_bar = ctk.CTkProgressBar(
-                self,
-                mode="indeterminate",
-                fg_color="#dc143c",
-                height=10,
-                corner_radius=3,
-                progress_color="#f8eff8",
-                width=300,
-            )
-            progress_bar.set(0)
-            progress_bar.pack(padx=10, pady=10, side="bottom")
-            progress_bar.start()
-
-    def show_message(self):
-        self.place(relx=0.5, rely=0.5, anchor="center")
-
-    def hide_message(self):
-        self.place_forget()
+def change_theme(new_theme):
+    ctk.set_appearance_mode(new_theme)
 
 
 class WhisperGui(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Whisper GUI - ASR")
-        self.iconbitmap(app_logo)
+        self.title("OpenAI Whisper GUI")
+        self.iconbitmap(APP_LOGO)
         self.geometry("1000x500")
         self.minsize(1000, 500)
 
-        self._center_window(1000, 500)
+        self.center_window(1000, 500)
 
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=0)
+
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
 
         self.top_frame = ctk.CTkFrame(self)
-        self.top_frame.grid(
-            row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10
-        )
+        self.top_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
 
         self.left_frame = ctk.CTkFrame(self)
         self.left_frame.grid(row=1, column=0, sticky="ns", padx=10, pady=(0, 10))
@@ -206,58 +222,34 @@ class WhisperGui(ctk.CTk):
         self.right_frame.grid(row=1, column=1, sticky="nsew", padx=10, pady=(0, 10))
 
         self.bottom_frame = ctk.CTkFrame(self)
-        self.bottom_frame.grid(
-            row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=10
-        )
+        self.bottom_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
 
         self.file_path = None
         self.result = None
+        self.device = None
+        self.lang = None
+        self.save_btn = None
+        self.subtitle_btn = None
+        self.start_btn = None
+        self.timestamps_checkbox = None
+        self.textbox = None
+        self.upload_btn = None
+        self.device_option = None
+        self.task_option = None
+        self.language_option = None
+        self.model_option = None
+        self.theme_option = None
+        self.device_dropdown = None
+        self.task_dropdown = None
+        self.language_dropdown = None
+        self.model_dropdown = None
+        self.theme_dropdown = None
         self.thread_pool = ThreadPoolExecutor(max_workers=5)
 
-        self.create_widgets()
-
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    def create_widgets(self):
-        self._top_frame()
-        self._left_frame()
-        self._right_frame()
-        self._bottom_frame()
-
-    # Frames
-    def _top_frame(self):
-        title = ctk.CTkLabel(
-            self.top_frame, text="Audio Transciber & Translater", font=("", 20, "bold")
-        )
-        title.pack(side="left", padx=10, pady=15)
-
-        values = ["System", "Dark", "Light"]
-        theme_option = ctk.CTkOptionMenu(
-            self.top_frame,
-            values=values,
-            command=self._change_theme,
-            **custom_optionmenu,
-        )
-        theme_option.set("System")
-        theme_option.pack(side="right", padx=10, pady=15)
-
-        theme_label = ctk.CTkLabel(self.top_frame, text="Theme", font=("", 12, "bold"))
-        theme_label.pack(side="right", padx=10, pady=15)
-
-    def _left_frame(self):
-        checker = CheckMemory()
-        result = checker.check_memory()
-        models = ["Tiny", "Base", "Small", "Medium", "Large", "Large-v2"]
-        models_value = []
-
-        if result == False:
-            notification = Notification(
-                master=self,
-                text="No Nvidia GPU with CUDA is available.",
-                ex_btn=True,
-                cl_btn=False,
-            )
-            self.after(2000, notification.show_message)
+        check_requirements = CheckRequirements()
+        result = check_requirements.check_memory()
+        models = ["Tiny", "Base", "Small", "Medium", "Large", "Large-v1", "Large-v2", "Large-v3"]
+        self.models_value = []
 
         if result:
             unmet_models = [
@@ -265,278 +257,125 @@ class WhisperGui(ctk.CTk):
             ]
 
             met_models = [model for model in models if model not in unmet_models]
-            models_value = met_models
+            self.models_value = met_models
 
-            notification = Notification(
+            self.device_value = ["GPU", "CPU"]
+
+            self.after(5000, lambda: CTkMessagebox(
                 master=self,
-                text=f"GPU Memory requirements not met for the following models: \n{unmet_models}",
-            )
-            self.after(2000, notification.show_message)
-
-        if result is None:
-            models_value = models
-
-        self.left_frame.grid_rowconfigure(5, weight=1)
-
-        title = ctk.CTkLabel(self.left_frame, text="Settings", font=("", 18))
-        title.grid(row=0, column=0, padx=10, pady=10)
-
-        model_label = ctk.CTkLabel(self.left_frame, text="Model Size")
-        model_label.grid(row=1, column=0, padx=10, pady=10)
-
-        self.model_option = ctk.CTkOptionMenu(
-            self.left_frame,
-            values=models_value,
-            **custom_optionmenu,
-        )
-        if models_value:
-            self.model_option.set(models_value[0])
+                title="INFO",
+                message=f"GPU Memory requirements not met for the following models: \n{unmet_models}",
+                corner_radius=8
+            ))
         else:
-            self.model_option.set("")
-        self.model_option.grid(row=1, column=1, padx=10, pady=10)
+            self.after(5000, lambda: CTkMessagebox(
+                master=self,
+                title="INFO",
+                message="CUDA not found",
+                corner_radius=8
+            ))
+            self.device_value = ["CPU"]
+            self.models_value = models
 
-        language_label = ctk.CTkLabel(self.left_frame, text="Language")
-        language_label.grid(row=2, column=0, padx=10, pady=10)
+        self.create_widgets()
 
-        language_values = [
-            "Auto Detection",
-            "English",
-            "Chinese",
-            "German",
-            "Spanish",
-            "Russian",
-            "Korean",
-            "French",
-            "Japanese",
-            "Portuguese",
-            "Turkish",
-            "Polish",
-            "Catalan",
-            "Dutch",
-            "Arabic",
-            "Swedish",
-            "Italian",
-            "Indonesian",
-            "Hindi",
-            "Finnish",
-            "Vietnamese",
-            "Hebrew",
-            "Ukrainian",
-            "Greek",
-            "Malay",
-            "Czech",
-            "Romanian",
-            "Danish",
-            "Hungarian",
-            "Tamil",
-            "Norwegian",
-            "Thai",
-            "Urdu",
-            "Croatian",
-            "Bulgarian",
-            "Lithuanian",
-            "Latin",
-            "Maori",
-            "Malayalam",
-            "Welsh",
-            "Slovak",
-            "Telugu",
-            "Persian",
-            "Latvian",
-            "Bengali",
-            "Serbian",
-            "Azerbaijani",
-            "Slovenian",
-            "Kannada",
-            "Estonian",
-            "Macedonian",
-            "Breton",
-            "Basque",
-            "Icelandic",
-            "Armenian",
-            "Nepali",
-            "Mongolian",
-            "Bosnian",
-            "Kazakh",
-            "Albanian",
-            "Swahili",
-            "Galician",
-            "Marathi",
-            "Punjabi",
-            "Sinhala",
-            "Khmer",
-            "Shona",
-            "Yoruba",
-            "Somali",
-            "Afrikaans",
-            "Occitan",
-            "Georgian",
-            "Belarusian",
-            "Tajik",
-            "Sindhi",
-            "Gujarati",
-            "Amharic",
-            "Yiddish",
-            "Lao",
-            "Uzbek",
-            "Faroese",
-            "Haitian creole",
-            "Pashto",
-            "Turkmen",
-            "Nynorsk",
-            "Maltese",
-            "Sanskrit",
-            "Luxembourgish",
-            "Myanmar",
-            "Tibetan",
-            "Tagalog",
-            "Malagasy",
-            "Assamese",
-            "Tatar",
-            "Hawaiian",
-            "Lingala",
-            "Hausa",
-            "Bashkir",
-            "Javanese",
-            "Sundanese",
-        ]
-        self.language_option = ctk.CTkOptionMenu(
-            self.left_frame,
-            values=language_values,
-            **custom_optionmenu,
-        )
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def create_widgets(self):
+        self.top_widgets()
+        self.left_widgets()
+        self.right_widgets()
+        self.bottom_widgets()
+
+    def top_widgets(self):
+        self.top_frame.grid_columnconfigure(0, weight=1)
+
+        title = ctk.CTkLabel(self.top_frame, text="Audio Transcriber and Translator", font=FONTS["title_bold"])
+        title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
+
+        theme_label = ctk.CTkLabel(self.top_frame, text="", image=ICONS["theme"])
+        theme_label.grid(row=0, column=1, padx=10, pady=20, sticky="e")
+
+        values = ["System", "Dark", "Light"]
+        self.theme_option = ctk.CTkOptionMenu(self.top_frame)
+        self.theme_option.grid(row=0, column=2, padx=(10, 20), pady=20, sticky="e")
+        self.theme_dropdown = CTkScrollableDropdownFrame(self.theme_option, values=values, command=change_theme,
+                                                         **DROPDOWN)
+        self.theme_option.set("System")
+
+    def left_widgets(self):
+        title = ctk.CTkLabel(self.left_frame, text="Settings", font=FONTS["subtitle_bold"])
+        title.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+
+        model_label = ctk.CTkLabel(self.left_frame, text="Model Size", anchor="w", font=FONTS["normal"])
+        model_label.grid(row=1, column=0, padx=20, pady=10, sticky="w")
+        self.model_option = ctk.CTkOptionMenu(self.left_frame)
+        self.model_option.grid(row=1, column=1, padx=20, pady=10, sticky="e")
+        self.model_dropdown = CTkScrollableDropdownFrame(self.model_option, values=self.models_value, **DROPDOWN)
+        self.model_option.set(self.models_value[0])
+
+        language_label = ctk.CTkLabel(self.left_frame, text="Language", anchor="w", font=FONTS["normal"])
+        language_label.grid(row=2, column=0, padx=20, pady=10, sticky="w")
+        self.language_option = ctk.CTkOptionMenu(self.left_frame)
+        self.language_dropdown = CTkScrollableDropdownFrame(self.language_option, values=LANGUAGE_VALUES, **DROPDOWN)
+        self.language_option.grid(row=2, column=1, padx=20, pady=10, sticky="e")
         self.language_option.set("Auto Detection")
-        self.language_option.grid(row=2, column=1, padx=10, pady=10)
 
-        task_label = ctk.CTkLabel(self.left_frame, text="Task")
-        task_label.grid(row=3, column=0, padx=10, pady=10)
-
+        task_label = ctk.CTkLabel(self.left_frame, text="Task", anchor="w", font=FONTS["normal"])
+        task_label.grid(row=3, column=0, padx=20, pady=10, sticky="w")
         task_values = ["Transcribe", "Translate"]
-        self.task_option = ctk.CTkOptionMenu(
-            self.left_frame,
-            values=task_values,
-            **custom_optionmenu,
-        )
+        self.task_option = ctk.CTkOptionMenu(self.left_frame)
+        self.task_option.grid(row=3, column=1, padx=20, pady=10, sticky="e")
+        self.task_dropdown = CTkScrollableDropdownFrame(self.task_option, values=task_values, **DROPDOWN)
         self.task_option.set("Transcribe")
-        self.task_option.grid(row=3, column=1, padx=10, pady=10)
 
-        device_label = ctk.CTkLabel(self.left_frame, text="Device")
-        device_label.grid(row=4, column=0, padx=10, pady=10)
+        device_label = ctk.CTkLabel(self.left_frame, text="Device", anchor="w", font=FONTS["normal"])
+        device_label.grid(row=4, column=0, padx=20, pady=10, sticky="w")
+        self.device_option = ctk.CTkOptionMenu(self.left_frame)
+        self.device_option.grid(row=4, column=1, padx=20, pady=10, sticky="e")
+        self.device_dropdown = CTkScrollableDropdownFrame(self.device_option, values=self.device_value, **DROPDOWN)
+        self.device_option.set(self.device_value[0])
 
-        device_value = ["CPU", "GPU"]
-        self.device_option = ctk.CTkOptionMenu(
-            self.left_frame,
-            values=device_value,
-            **custom_optionmenu,
-        )
-        self.device_option.set("GPU")
-        self.device_option.grid(row=4, column=1, padx=10, pady=10)
+        self.upload_btn = ctk.CTkButton(self.left_frame, text="Choose File", command=self.select_file,
+                                        font=FONTS["btn"], height=30)
+        self.upload_btn.grid(row=5, column=0, padx=20, pady=20, sticky="sew", columnspan=2)
 
-        # #Language to Translate To Settings
-        # translated_language_label = ctk.CTkLabel(self.left_frame, text="Translate To")
-        # translated_language_label.grid(row=5, column=0, padx=10, pady=10)
-        #
-        # translated_language_value = language_values
-        # self.translated_language_option = ctk.CTkOptionMenu(
-        #     self.left_frame,
-        #     values=translated_language_value,
-        #     **custom_optionmenu,
-        # )
-        # self.translated_language_option.set("English")
-        # self.translated_language_option.grid(row=5, column=1, padx=10, pady=10)
-
-        self.upload_button = ctk.CTkButton(
-            self.left_frame,
-            text="Upload Audio/Video",
-            command=self.select_file,
-            border_spacing=5,
-            **custom_button,
-        )
-        self.upload_button.grid(
-            row=6, column=0, padx=10, pady=10, rowspan=5, columnspan=2
-        )
-
-    def _right_frame(self):
+    def right_widgets(self):
         self.right_frame.grid_rowconfigure(0, weight=1)
-        self.right_frame.grid_columnconfigure((0, 1), weight=1)
+        self.right_frame.grid_columnconfigure(0, weight=1)
 
         self.textbox = ctk.CTkTextbox(self.right_frame, wrap="word")
-        self.textbox.insert("0.0", "Configure settings and than click start button!")
-        self.textbox.configure(state="disabled")
-        self.textbox.grid(
-            row=0, column=0, columnspan=6, padx=10, pady=10, sticky="nsew"
-        )
+        self.textbox.grid(row=0, column=0, padx=10, pady=10, sticky="nsew", columnspan=5)
 
-        self.show_time_checkbox = ctk.CTkCheckBox(
-            self.right_frame,
-            text="Show Time",
-            onvalue="on",
-            offvalue="off",
-            corner_radius=2,
-            fg_color="#a52a2a",
-            hover_color="#8d0d26",
-        )
+        self.timestamps_checkbox = ctk.CTkCheckBox(self.right_frame, text="Show timestamps", onvalue=True,
+                                                   offvalue=False, font=FONTS["normal"])
 
-        self.show_time_checkbox.grid(row=1, column=1, padx=10, pady=10)
+        self.timestamps_checkbox.grid(row=1, column=0, padx=20, pady=20, sticky="w")
 
-        self.start_button = ctk.CTkButton(
-            self.right_frame,
-            text="Start",
-            command=self.start_task,
-            **custom_button,
-        )
-        self.start_button.grid(row=1, column=2, padx=10, pady=10)
+        self.start_btn = ctk.CTkButton(self.right_frame, text="Start", command=self.start_task, font=FONTS["btn"])
+        self.start_btn.grid(row=1, column=2, padx=10, pady=20)
 
-        self.subtitle_button = ctk.CTkButton(
-            self.right_frame,
-            text="Add Subtitle to Video",
-            command=self.start_subtask,
-            **custom_button,
-        )
-        self.subtitle_button.grid(row=1, column=3, padx=10, pady=10)
+        self.subtitle_btn = ctk.CTkButton(self.right_frame, text="Add Subtitles", command=self.start_subtask,
+                                          font=FONTS["btn"])
+        self.subtitle_btn.grid(row=1, column=3, padx=10, pady=20)
 
-        self.save_button = ctk.CTkButton(
-            self.right_frame,
-            text="Save",
-            command=self.save_text,
-            **custom_button,
-        )
-        self.save_button.grid(row=1, column=4, padx=10, pady=10)
+        self.save_btn = ctk.CTkButton(self.right_frame, text="Save", command=self.save_text, font=FONTS["btn"])
+        self.save_btn.grid(row=1, column=4, padx=10, pady=20)
 
-        self.clear_button = ctk.CTkButton(
-            self.right_frame,
-            text="",
-            command=self.clear_output,
-            image=clear_icon,
-            compound="right",
-            width=50,
-            border_spacing=2,
-            **custom_button,
-        )
-        self.clear_button.grid(row=1, column=5, padx=10, pady=10)
+    def bottom_widgets(self):
+        self.bottom_frame.grid_columnconfigure(0, weight=1)
 
-    def _bottom_frame(self):
-        self.bottom_frame.grid_columnconfigure(1, weight=1)
+        version_label = ctk.CTkLabel(self.bottom_frame, text=APP_VERSION, font=FONTS["small"])
+        version_label.grid(row=0, column=0, padx=20, pady=10, sticky="w")
 
-        version_label = ctk.CTkLabel(self.bottom_frame, text=app_version, font=("", 12))
-        version_label.grid(row=0, column=0, padx=10, pady=10)
+        github_btn = ctk.CTkButton(self.bottom_frame, text="Github", command=open_github, image=ICONS["github"],
+                                   compound="left", font=FONTS["btn"])
+        github_btn.grid(row=0, column=1, padx=20, pady=10, sticky="e")
 
-        github_button = ctk.CTkButton(
-            self.bottom_frame,
-            text="Github",
-            command=self.open_github,
-            image=github_icon,
-            compound="right",
-            width=100,
-            border_spacing=4,
-            **custom_button,
-        )
-        github_button.grid(row=0, column=2, padx=10, pady=10)
-
-    # Functions
-    #TODO condition to check if task = Translate
     def start_task(self):
         if self.return_data():
+            CTkMessagebox(self, title="Transcribing...", message="Please wait while transcribe process to finished.",
+                          corner_radius=8)
             file_path, model, language, task, device, show_time = self.return_data()
             self.thread_pool.submit(
                 self.run_transcribe,
@@ -550,110 +389,65 @@ class WhisperGui(ctk.CTk):
 
     def run_transcribe(self, file_path, model, language, task, device, show_time):
         try:
-            notification = Notification(
-                master=self,
-                text="Task has started. Please wait!",
-                cl_btn=False,
-                progress_bar=True,
-            )
-            notification.show_message()
-            self.start_button.configure(state="disabled")
+            self.disable_controller()
+            fp16 = False
 
-            fp16 = True
-
-            if device == "cpu":
-                fp16 = False
+            if device == "cuda":
+                fp16 = True
 
             load_model = whisper.load_model(model, device=device)
-            load_audio = whisper.load_audio(file_path)
-            load_audio = whisper.pad_or_trim(load_audio)
-            audio = file_path
 
             if language == "auto detection":
+                load_audio = whisper.load_audio(file_path)
+                load_audio = whisper.pad_or_trim(load_audio)
                 mel = whisper.log_mel_spectrogram(load_audio).to(load_model.device)
 
                 _, probs = load_model.detect_language(mel)
                 lang = max(probs, key=probs.get)
                 self.lang = lang
+                self.device = device
 
                 result = load_model.transcribe(
-                    audio,
+                    file_path,
                     language=lang,
                     task=task,
                     fp16=fp16,
                 )
 
-                if show_time == "on":
-                    for segment in result["segments"]:
-                        segment = "[%s --> %s]%s" % (
-                            round(segment["start"], 2),
-                            round(segment["end"], 2),
-                            segment["text"],
-                        )
-                        self.textbox.configure(state="normal")
-                        self.textbox.delete("0.0", "end")
-                        self.textbox.insert("end", segment + "\n")
-                        self.textbox.configure(state="disabled")
-                else:
-                    text = result["text"].strip().capitalize()
-                    self.textbox.configure(state="normal")
-                    self.textbox.delete("0.0", "end")
-                    self.textbox.insert("end", text)
-                    self.textbox.configure(state="disabled")
+            else:
+                result = load_model.transcribe(file_path, language=language, task=task, fp16=fp16)
+
+            if show_time:
+                self.textbox.delete("0.0", "end")
+                for segment in result["segments"]:
+                    segment = "[%s --> %s]%s" % (
+                        round(segment["start"], 2),
+                        round(segment["end"], 2),
+                        segment["text"],
+                    )
+                    self.textbox.insert("end", segment + "\n")
 
             else:
-                ### Using the command line via subprocess to translate is a temporary fix for the api method not
-                ### generating a full translation when load_model.transcribe() is called.
-                result = subprocess.call(
-                    f"whisper {file_path} --output_format srt --language {language.capitalize()} --model {model}"
-                )
-                # task = "translate"
-                # result = load_model.transcribe(
-                #     audio,
-                #     language=language,
-                #     task=task,
-                #     fp16=fp16,
-                # )
-                # if show_time == "on":
-                #     for segment in result["segments"]:
-                #         segment = "[%s --> %s]%s" % (
-                #             round(segment["start"], 2),
-                #             round(segment["end"], 2),
-                #             segment["text"],
-                #         )
-                #         self.textbox.configure(state="normal")
-                #         self.textbox.delete("0.0", "end")
-                #         self.textbox.insert("end", segment + "\n")
-                #         self.textbox.configure(state="disabled")
-                # else:
-                #     text = result["text"].strip().capitalize()
-                #     self.textbox.configure(state="normal")
-                #     self.textbox.delete("0.0", "end")
-                #     self.textbox.insert("end", text)
-                #     self.textbox.configure(state="disabled")
+                text = result["text"].strip().capitalize()
+                self.textbox.delete("0.0", "end")
+                self.textbox.insert("end", text)
 
             self.result = result
 
-            self.start_button.configure(state="normal")
-            notification.hide_message()
-            notification = Notification(master=self, text="Task complete!")
-            notification.show_message()
-            self.after(5000, notification.hide_message)
-        except Exception as e:
-            CTkMessagebox(width=700,height=200,sound=True,title="Error", message=f"{e}")
-            self.start_button.configure(state="normal")
-            notification.hide_message()
-            notification = Notification(master=self, text="Task Failed!")
-            notification.show_message()
-            self.after(5000, notification.hide_message)
+            self.enable_controller()
+        except:
+            self.enable_controller()
+
     def start_subtask(self):
-        if self.result is not None and self.file_path is not None:
-            ogfile_name = os.path.basename(self.file_path)
+        if self.result and self.file_path:
+            CTkMessagebox(self, title="INFO", message="Please wait while adding subtitles to the video.",
+                          corner_radius=8)
+            og_file_name = os.path.basename(self.file_path)
             sep = "."
-            ogfile_name = ogfile_name.split(sep, 1)[0]
+            og_file_name = og_file_name.split(sep, 1)[0]
             file_path = fd.asksaveasfilename(
                 parent=self,
-                initialfile=ogfile_name + "-sub",
+                initialfile=og_file_name + "-sub",
                 defaultextension=".srt",
                 title="Export subtitle",
                 filetypes=[("MPEG-4", "*.mp4"), ("MKV", "*.mkv"), ("All", "*.*")],
@@ -663,15 +457,15 @@ class WhisperGui(ctk.CTk):
             dir_name = os.path.dirname(file_path)
             file_extension = os.path.splitext(file_path)
 
-            tempfile_name = "tempsrt.srt"
+            temp_file_name = "temp_srt.srt"
             writer = get_writer("srt", ".")
-            writer(self.result, tempfile_name)
+            writer(self.result, temp_file_name, {"highlight_words": True, "max_line_count": 50, "max_line_width": 3})
 
             if file_extension[1] == ".mkv":
                 os.system(
                     "ffmpeg -i {} -i {} -map 0 -map 1 -c copy -disposition:s:0 default -metadata:s:s:0 language={} {} -y".format(
                         '"' + self.file_path + '"',
-                        tempfile_name,
+                        temp_file_name,
                         self.lang,
                         os.path.join('"' + dir_name, file_name + '"'),
                     )
@@ -681,7 +475,7 @@ class WhisperGui(ctk.CTk):
                     os.system(
                         "ffmpeg -i {} -c:v h264_nvenc -vf subtitles={} {} -y".format(
                             '"' + self.file_path + '"',
-                            tempfile_name,
+                            temp_file_name,
                             os.path.join('"' + dir_name, file_name + '"'),
                         )
                     )
@@ -689,14 +483,15 @@ class WhisperGui(ctk.CTk):
                     os.system(
                         "ffmpeg -i {} -vf subtitles={} {} -y".format(
                             '"' + self.file_path + '"',
-                            tempfile_name,
+                            temp_file_name,
                             os.path.join('"' + dir_name, file_name + '"'),
                         )
                     )
 
-            os.remove(os.path.join(".", tempfile_name))
+            os.remove(os.path.join(".", temp_file_name))
         else:
-            self.show_notification_5(text="No file is transcribed/selected.")
+            CTkMessagebox(self, title="WARNING", message="No file is transcribed/selected.",
+                          corner_radius=8, icon="warning")
 
     def return_data(self):
         if self.file_path:
@@ -704,7 +499,7 @@ class WhisperGui(ctk.CTk):
             language = self.language_option.get().lower()
             task = self.task_option.get().lower()
             device = self.device_option.get().lower()
-            show_time = self.show_time_checkbox.get()
+            show_time = self.timestamps_checkbox.get()
 
             if language == "english" and model != "large":
                 model += ".en"
@@ -714,30 +509,18 @@ class WhisperGui(ctk.CTk):
 
             if device == "gpu":
                 device = "cuda"
-                self.device = "cuda"
 
             return self.file_path, model, language, task, device, show_time
 
-        self.show_notification_5(text="Please upload an audio file to begin the task!")
-        return None
-
-    def open_github(self):
-        webbrowser.open("https://github.com/iamironman0")
-
-    def clear_output(self):
-        self.textbox.configure(state="normal")
-        self.textbox.delete("0.0", "end")
-        self.textbox.configure(state="disabled")
-
     def save_text(self):
-        if self.result is not None and self.file_path is not None:
-            ogfile_name = os.path.basename(self.file_path)
+        if self.result and self.file_path:
+            og_file_name = os.path.basename(self.file_path)
             sep = "."
-            ogfile_name = ogfile_name.split(sep, 1)[0]
+            og_file_name = og_file_name.split(sep, 1)[0]
 
             file_path = fd.asksaveasfilename(
                 parent=self,
-                initialfile=ogfile_name,
+                initialfile=og_file_name,
                 defaultextension=".txt",
                 title="Export subtitle",
                 filetypes=[
@@ -750,51 +533,40 @@ class WhisperGui(ctk.CTk):
                 ],
             )
 
-            file_name = os.path.basename(file_path)
-            file_extension = os.path.splitext(file_path)
-            dir_name = os.path.dirname(file_path)
+            selected_extension = os.path.splitext(file_path)
+            file_extension = selected_extension[1]
 
-            if file_path and (file_extension[1] == ".srt"):
-                writer = get_writer("srt", dir_name)
-                word_options = {
-                    "highlight_words": True,
-                    "max_line_count": 50,
-                    "max_line_width": 3
-                }
-                writer(self.result, file_name,word_options)
-                self.save_notification()
-            elif file_path and (file_extension[1] == ".txt"):
-                txt_writer = get_writer("txt", dir_name)
-                txt_writer(self.result, file_name)
-                self.save_notification()
-            elif file_path and (file_extension[1] == ".vtt"):
-                vtt_writer = get_writer("vtt", dir_name)
-                vtt_writer(self.result, file_name)
-                self.save_notification()
-            elif file_path and (file_extension[1] == ".tsv"):
-                tsv_writer = get_writer("tsv", dir_name)
-                tsv_writer(self.result, file_name)
-                self.save_notification()
-            elif file_path and (file_extension[1] == ".json"):
-                json_writer = get_writer("json", dir_name)
-                json_writer(self.result, file_name)
-                self.save_notification()
-            elif file_path and (file_extension[1] == ".all"):
-                all_writer = get_writer("all", dir_name)
-                all_writer(self.result, file_name)
-                self.save_notification()
+            if file_path:
+                dir_name, get_file_name = os.path.split(file_path)
+
+                if file_extension == ".srt":
+                    writer = get_writer("srt", dir_name)
+                    writer(self.result, self.file_path,
+                           {"highlight_words": True, "max_line_count": 50, "max_line_width": 3})
+                elif file_extension == ".txt":
+                    txt_writer = get_writer("txt", dir_name)
+                    txt_writer(self.result, self.file_path, {"highlight_words": True, "max_line_count": 50,
+                                                             "max_line_width": 3})
+                elif file_extension == ".vtt":
+                    vtt_writer = get_writer("vtt", dir_name)
+                    vtt_writer(self.result, self.file_path, {"highlight_words": True, "max_line_count": 50,
+                                                             "max_line_width": 3})
+                elif file_extension == ".tsv":
+                    tsv_writer = get_writer("tsv", dir_name)
+                    tsv_writer(self.result, self.file_path, {"highlight_words": True, "max_line_count": 50,
+                                                             "max_line_width": 3})
+                elif file_extension == ".json":
+                    json_writer = get_writer("json", dir_name)
+                    json_writer(self.result, self.file_path, {"highlight_words": True, "max_line_count": 50,
+                                                              "max_line_width": 3})
+                elif file_extension == ".all":
+                    all_writer = get_writer("all", dir_name)
+                    all_writer(self.result, self.file_path, {"highlight_words": True, "max_line_count": 50,
+                                                             "max_line_width": 3})
+
         else:
-            self.show_notification_5(text="No file is transcribed/selected.")
-
-    def show_notification_5(self, text):
-        notification = Notification(master=self, text=text)
-        notification.show_message()
-        self.after(5000, notification.destroy)
-
-    def save_notification(self):
-        notification = Notification(master=self, text="Saving Successfully!")
-        notification.show_message()
-        self.after(5000, notification.destroy)
+            CTkMessagebox(self, title="WARNING", message="No file is transcribed/selected.",
+                          corner_radius=8, icon="warning")
 
     def select_file(self):
         file_path = fd.askopenfilename(
@@ -803,32 +575,68 @@ class WhisperGui(ctk.CTk):
             filetypes=(
                 (
                     ("All files", "*.*"),
-                    ("Videofile", "*.mp4 *.avi *.mkv *.mov *.wmv *.webm *.flv"),
+                    ("Video files", "*.mp4 *.avi *.mkv *.mov *.wmv *.webm *.flv"),
                     ("Audiofile", "*.mp3 *.wav *.flac *.aac *.ogg *.wma *.m4a"),
                 )
             ),
         )
         if file_path:
             file_name = os.path.basename(file_path)
-            self.show_notification_5(text=f"Selected file name: {file_name}")
             self.file_path = file_path
+            CTkMessagebox(self, title="INFO", message=f"Selected file name: {file_name}",
+                          corner_radius=8)
         else:
             self.file_path = None
-            self.show_notification_5(text="No file is selected.")
+            CTkMessagebox(self, title="WARNING", message="No file is selected.",
+                          corner_radius=8, icon="warning")
 
-    def _center_window(self, window_width, window_height):
+    def enable_controller(self):
+        self.theme_dropdown.configure(state="normal")
+        self.model_dropdown.configure(state="normal")
+        self.language_dropdown.configure(state="normal")
+        self.task_dropdown.configure(state="normal")
+        self.device_dropdown.configure(state="normal")
+
+        self.theme_option.configure(state="normal")
+        self.start_btn.configure(state="normal")
+        self.subtitle_btn.configure(state="normal")
+        self.save_btn.configure(state="normal")
+        self.timestamps_checkbox.configure(state="normal")
+        self.upload_btn.configure(state="normal")
+        self.model_option.configure(state="normal")
+        self.language_option.configure(state="normal")
+        self.task_option.configure(state="normal")
+        self.device_option.configure(state="normal")
+
+    def disable_controller(self):
+        self.theme_dropdown.configure(state="disabled")
+        self.model_dropdown.configure(state="disabled")
+        self.language_dropdown.configure(state="disabled")
+        self.task_dropdown.configure(state="disabled")
+        self.device_dropdown.configure(state="disabled")
+
+        self.theme_option.configure(state="disabled")
+        self.start_btn.configure(state="disabled")
+        self.subtitle_btn.configure(state="disabled")
+        self.save_btn.configure(state="disabled")
+        self.timestamps_checkbox.configure(state="disabled")
+        self.upload_btn.configure(state="disabled")
+        self.model_option.configure(state="disabled")
+        self.language_option.configure(state="disabled")
+        self.task_option.configure(state="disabled")
+        self.device_option.configure(state="disabled")
+
+    def center_window(self, window_width, window_height):
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
-        x_cordinate = int((screen_width / 2) - (window_width / 2))
-        y_cordinate = int((screen_height / 2) - (window_height / 2))
-        self.geometry(f"{window_width}x{window_height}+{x_cordinate}+{y_cordinate}")
+        x_coordinate = int((screen_width / 2) - (window_width / 2))
+        y_coordinate = int((screen_height / 2) - (window_height / 2))
+        self.geometry(f"{window_width}x{window_height}+{x_coordinate}+{y_coordinate}")
 
-    def _change_theme(self, new_theme):
-        ctk.set_appearance_mode(new_theme)
-
-    def _on_close(self):
+    def on_close(self):
         self.thread_pool.shutdown(wait=False)
         self.destroy()
+        sys.exit()
 
 
 if __name__ == "__main__":

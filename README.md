@@ -14,7 +14,7 @@
 
 ###
 
-<p align="left">- Light/dark mode toggle<br>- Modern UI<br>- Export output to different file type<br>- Add subtitle to video<br>- and more...</p>
+<p align="left">- Light/dark mode toggle<br>- Modern UI<br>- Export transcribed text<br>- Add subtitle to video<br>- And more...</p>
 
 ###
 
@@ -41,14 +41,14 @@ git clone https://github.com/iamironman0/OpenAI-Whisper-GUI.git
 cd OpenAI-Whisper-GUI
 ```
 ```
-pip install customtkinter Pillow pynvml torch openai-whisper torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
+python setup.py
 ```
 ```
 python main.py
 ```
 ###
 
-> For more information please visit OpenAI Wishper github: https://github.com/openai/whisper
+> For more information please visit OpenAI Whisper GitHub: https://github.com/openai/whisper
 
 ###
 

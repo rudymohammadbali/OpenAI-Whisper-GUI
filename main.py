@@ -188,7 +188,7 @@ class CheckRequirements:
 
 
 def open_github():
-    webbrowser.open("https://github.com/iamironman0")
+    webbrowser.open("https://github.com/rudymohammadbali")
 
 
 def change_theme(new_theme):

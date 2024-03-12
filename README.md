@@ -35,7 +35,7 @@
 ###
 
 ```
-git clone https://github.com/iamironman0/OpenAI-Whisper-GUI.git
+git clone https://github.com/rudymohammadbali/OpenAI-Whisper-GUI.git
 ```
 ```
 cd OpenAI-Whisper-GUI

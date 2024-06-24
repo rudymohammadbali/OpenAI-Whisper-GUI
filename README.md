@@ -32,7 +32,11 @@
 
 ###
 
-<p align="left">- Light/dark mode toggle<br>- Modern UI<br>- Export transcribed text<br>- Add subtitle to video<br>- And more...</p>
+- Modern UI
+- Light/dark mode
+- Export transcribed text
+- Add subtitle to video
+- and more...
 
 ###
 

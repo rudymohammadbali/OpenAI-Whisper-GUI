@@ -6,9 +6,27 @@
 
 ###
 
-![258760979-ed4e92a3-f7d4-40d5-8e67-6e849a8190ab](https://github.com/iamironman0/OpenAI-Whisper-GUI/assets/63475761/e343aa64-5c4a-41e6-afec-e07069ee5b28)
+![demo](https://github.com/rudymohammadbali/OpenAI-Whisper-GUI/assets/63475761/96b3e69e-067c-461e-b212-e1884f15a2a3)
+
 
 ###
+
+<h2 align="left">Version: 1.0.0, Release Date: 2024, June 24</h2>
+
+- Main Update
+1. Update to widgets, layouts and theme
+2. Removed Show Timestamps option, which is not necessary
+
+- New Features
+1. Config handler: Save, load and reset config
+2. Get GPU info and automatically set available models
+3. New app logo
+4. Settings Interface
+5. Remember last used options
+
+- Bug Fixes
+1. Code refactoring and optimization
+2. Fix Cuda not found warning message
 
 <h2 align="left">Features</h2>
 

@@ -365,7 +365,7 @@ class WhisperTranscriber:
         self.language = self.detect_language() if language == 'auto' else language
         self.task = "transcribe" if task == 'translate' and self.language in ['en', 'english'] else task
         self.prompt = self.get_valid_prompts(prompt)
-        self.device = device if device in ["cuda", "cpu"] else None
+        self.device = device if device in ["gpu", "cpu"] else None
 
         if self.language in ['en', 'english'] and self.model_size not in ["large", "large-v1", "large-v2", "large-3"]:
             self.model_size += '.en'
